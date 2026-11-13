@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+pymupdf
+google-genai
+rank_bm25
+pydantic
