@@ -1,5 +1,4 @@
 import os
-import glob
 import fitz
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,30 +20,36 @@ client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 chunks = []
 bm25 = None
 
-def load_abbyy_pdfs(folder_path="./tai_lieu_pdf"):
+def load_all_pdfs():
     global chunks, bm25
     chunks = []
     tokenized_corpus = []
-    
-    pdf_files = glob.glob(os.path.join(folder_path, "*.pdf"))
-    for file_path in pdf_files:
-        file_name = os.path.basename(file_path)
-        doc = fitz.open(file_path)
-        for page_num in range(len(doc)):
-            text = doc[page_num].get_text("text").strip()
-            if len(text) > 30:
-                chunks.append({
-                    "file": file_name,
-                    "page": page_num + 1,
-                    "content": text
-                })
-                tokenized_corpus.append(text.lower().split())
-                
+    pdf_count = 0
+
+    for root, dirs, files in os.walk("."):
+        for file_name in files:
+            if file_name.lower().endswith(".pdf"):
+                pdf_count += 1
+                file_path = os.path.join(root, file_name)
+                try:
+                    doc = fitz.open(file_path)
+                    for page_num in range(len(doc)):
+                        text = doc[page_num].get_text().strip()
+                        if len(text) > 10:
+                            chunks.append({
+                                "file": file_name,
+                                "page": page_num + 1,
+                                "content": text
+                            })
+                            tokenized_corpus.append(text.lower().split())
+                except Exception as e:
+                    print(f"Loi doc file {file_name}: {e}")
+
     if tokenized_corpus:
         bm25 = BM25Okapi(tokenized_corpus)
-    print(f"Da nap {len(chunks)} trang tu {len(pdf_files)} file PDF.")
+    print(f"Da nap thanh cong {len(chunks)} trang tu {pdf_count} file PDF.")
 
-load_abbyy_pdfs()
+load_all_pdfs()
 
 class ChatRequest(BaseModel):
     question: str
@@ -56,7 +61,7 @@ def health_check():
 @app.post("/ask")
 def ask_archive(req: ChatRequest):
     if not chunks or bm25 is None:
-        return {"answer": "Hệ thống chưa có tài liệu nào được nạp vào thư mục dữ liệu."}
+        return {"answer": "Hệ thống chưa đọc được nội dung chữ từ các file PDF."}
 
     tokenized_query = req.question.lower().split()
     top_n = bm25.get_top_n(tokenized_query, chunks, n=4)
